@@ -1,0 +1,196 @@
+.data
+	devidend_text: .asciz "Введите делимое: "
+	devisor_text: .asciz "Введите делитель: "
+	devision_by_zero_error: .asciz "...НЕЛЬЗЯ ДЕЛИТЬ НА НОЛЬ...\n"
+	input_error: .asciz "...НЕКОРРЕКТНЫЙ ВВОД...\n "
+	try_again: .asciz "Попробуйте снова\n"
+	newline: .asciz "\n"
+	minus: .asciz "-"
+	buffer: .space 64
+	answer_text: .asciz "Результат: "
+	reminder_text: "Остаток: "
+
+.text
+.globl main
+
+main:
+# ввод делимого
+read_dividend:
+    # просьба ввести делимое
+    la a0, devidend_text
+    li a7, 4
+    ecall
+    #читаем строку
+    la a0, buffer
+    li a1, 64
+    li a7, 8
+    ecall
+
+    la a0, buffer
+    jal ra, str_to_int #преобразуем строку в целое число(идет в а0) в а1 -флаг успеха
+    beq a1, zero, read_dividend # если в флаг ошибки =0, то неккоректный ввод
+    mv s0, a0
+
+#ввод делителя
+read_divisor:
+
+    # просьба ввести делитель
+    la a0, devisor_text 
+    li a7, 4
+    ecall
+    #читаем строку
+    la a0, buffer
+    li a1, 64
+    li a7, 8
+    ecall
+
+    la a0, buffer
+    jal ra, str_to_int
+    beq a1, zero, read_divisor
+    beq a0, zero, div_by_zero # проверка делителя на 0
+    mv s1, a0
+
+    j continue
+
+div_by_zero: # деление на 0 ошибка
+    la a0, devision_by_zero_error
+    li a7, 4
+    ecall
+    la a0, try_again
+    li a7, 4
+    ecall
+    j read_divisor
+
+str_to_int:
+    li a1, 1 # флаг успеха
+    li t0, 0 # результат
+    li t1, 0 # флаг отрицательного числа
+
+    lb t2, 0(a0)
+    beq t2, zero, str_error # пустая строка-> ошибка
+    li t3, '-'
+    beq t2, t3, is_negative
+    j parse_loop
+
+is_negative:
+    li t1, 1
+    addi a0, a0, 1
+
+# парсер строки в число
+parse_loop:
+    lb t2, 0(a0)
+    # если конеч стороки /0 или /n выходим из списка
+    beq t2, zero, parse_done
+    li t3, '\n'
+    beq t2, t3, parse_done
+    #проверка что символ 0...9
+    li t3, '0'
+    blt t2, t3, str_error
+    li t4, '9'
+    bgt t2, t4, str_error
+    #вычитаем ASCII 0 чтобы получить число
+    addi t2, t2, -48
+    li t5, 10
+    #проверка на переполнение int32
+    li t6, 214748364
+    bgt t0, t6, str_error
+    mul t0, t0, t5
+    add t0, t0, t2
+
+    li t6, 2147483647
+    bgt t0, t6, str_error
+    addi a0, a0, 1
+    j parse_loop
+
+# если число было отрицательным меняем занк
+parse_done:
+    beq t1, zero, not_negative
+    neg t0, t0
+not_negative:
+    mv a0, t0
+    jr ra
+
+# ошибка неправильного ввода
+str_error:
+    la a0, input_error
+    li a7, 4
+    ecall
+    la a0, buffer
+    li a7, 4
+    ecall
+    la a0, newline
+    li a7, 4
+    ecall
+    la a0, try_again
+    li a7, 4
+    ecall
+    li a1, 0
+    jr ra
+
+# инициализация переменнных + проверка отрицательности делимого и взятие его модуля
+continue:
+    li t3, 0 # частное = 0
+    mv t4, s0 # остаток = делимое
+    li t2, 0 # флаг знака результата
+
+    # Делимое
+    slt t0, s0, zero
+    beq t0, zero, check_divisor
+    neg s0, s0
+    mv t4, s0
+    xori t2, t2, 1
+
+check_divisor:
+    # Делитель
+    slt t1, s1, zero
+    beq t1, zero, start_division
+    neg s1, s1
+    xori t2, t2, 1
+
+start_division:
+# деление вычитанием
+division_loop:
+    blt t4, s1, division_done
+    sub t4, t4, s1
+    addi t3, t3, 1
+    j division_loop
+
+division_done:
+    beq t2, zero, print_positive
+
+#печать отрицательного числа
+print_negative:
+    la a0, answer_text
+    li a7, 4
+    ecall
+    la a0, minus
+    li a7, 4
+    ecall
+    mv a0, t3
+    li a7, 1
+    ecall
+    j print_remainder
+
+# печать положительного числа
+print_positive:
+    la a0, answer_text
+    li a7, 4
+    ecall
+    mv a0, t3
+    li a7, 1
+    ecall
+
+#печать остатка
+print_remainder:
+    la a0, newline
+    li a7, 4
+    ecall
+    la a0, reminder_text
+    li a7, 4
+    ecall
+    mv a0, t4
+    li a7, 1
+    ecall
+
+    li a7, 10
+    ecall
